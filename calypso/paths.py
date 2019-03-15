@@ -77,14 +77,7 @@ def url_to_file(url):
 
 def is_collection(url):
     urlpath = url_to_file(url)
-    if not os.path.isdir(urlpath):
-        return False
-    while True:
-        if os.path.isdir(os.path.join(urlpath, '.git')):
-            return True
-        if urlpath == data_root():
-            return False
-        urlpath, stripped = os.path.split(urlpath)
+    return os.path.isdir(urlpath)
 
 #
 # Given a URL, return the parent URL by stripping off
@@ -156,6 +149,6 @@ def collection_from_path(path):
     # unquote, strip off any trailing slash, then clean up /../ and // entries
     collection = "/" + urllib.parse.unquote(collection).strip("/")
 
-    log.debug('Path %s results in collection: %s', path, collection)
+    # log.debug('Path %s results in collection: %s', path, collection)
     return collection
     

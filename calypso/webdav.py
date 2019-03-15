@@ -106,7 +106,10 @@ class Item(object):
 
         self.path = path
         self.name = self.object.x_calypso_name.value
-        self.urlpath = "/".join([parent_urlpath, self.name])
+        if parent_urlpath.endswith("/"):
+            self.urlpath = parent_urlpath + self.name
+        else:
+            self.urlpath = "/".join([parent_urlpath, self.name])
         self.tag = self.object.name
         self.etag = hashlib.sha1(text.encode('utf-8')).hexdigest()
 
@@ -148,6 +151,10 @@ class Item(object):
                 return True
             if child.name == 'VTODO':
                 return True
+        return False
+
+    @property
+    def is_collection(self):
         return False
 
     @property
@@ -215,7 +222,6 @@ class Item(object):
 
         return self.name
 
-
 class Pathtime(object):
     """Path name and timestamps"""
 
@@ -232,6 +238,57 @@ class Pathtime(object):
         if newmtime == self.mtime:
             return True
         self.mtime = newmtime
+        return False
+
+class Directory(Pathtime):
+
+    def __init__(self, path, name, parent_urlpath):
+        Pathtime.__init__(self, path)
+        self.name = name
+        self.etag = hashlib.sha1(path.encode('utf-8')).hexdigest()
+        if parent_urlpath.endswith("/"):
+            self.urlpath = parent_urlpath + self.name
+        else:
+            self.urlpath = "/".join([parent_urlpath, self.name])
+
+    @property
+    def is_vcard(self):
+        return False
+
+    @property
+    def is_vcal(self):
+        return False
+
+    @property
+    def is_collection(self):
+        return True
+
+    @property
+    def file_prefix(self):
+        return ''
+
+    @property
+    def file_extension(self):
+        return ''
+
+    @property
+    def text(self):
+        return self.path
+
+    @property
+    def length(self):
+        return "%d" % len(self.path)
+
+    @property
+    def last_modified(self):
+        return time.gmtime(self.curmtime)
+        
+    @property
+    def is_calendar(self):
+        return True
+
+    @property
+    def is_addressbook(self):
         return False
 
 class CalypsoError(Exception):
@@ -253,31 +310,31 @@ class Collection(object):
 
         try:
             f = codecs.open(os.path.join(self.path, ".git/description"), encoding='utf-8')
-        except IOError:
+            return f.read()
+        except:
             # .git/description is not present eg when the complete server is a single git repo
             return self.urlpath
-        return f.read()
 
     def read_file(self, path):
         text = codecs.open(path,encoding='utf-8').read()
         item = Item(text, None, path, self.urlpath)
         return item
 
-    def insert_file(self, path):
-        try:
-            item = self.read_file(path)
-            self.my_items.append(item)
-        except Exception as ex:
-            self.log.exception("Insert %s failed", path)
-            return
-
-    def insert_directory(self, path):
-         try:
-            item = Collection(path)
-            self.my_items.append(item)
-         except Exception as ex:
-            self.log.exception("Insert %s failed", path)
-            return
+    def insert_file(self, path, name):
+        if os.path.isdir(path):
+            try:
+                item = Directory(path, name, self.urlpath)
+                self.my_dirs.append(item)
+            except Exception as ex:
+                self.log.exception("Insert %s failed", path)
+                return
+        else:
+            try:
+                item = self.read_file(path)
+                self.my_items.append(item)
+            except Exception as ex:
+                self.log.exception("Insert %s failed", path)
+                return
 
     def remove_file(self, path):
         old_items=[]
@@ -286,10 +343,16 @@ class Collection(object):
                 old_items.append(old_item)
         for old_item in old_items:
             self.my_items.remove(old_item)
+        old_dirs=[]
+        for old_dir in self.my_dirs:
+            if old_dir.path == path:
+                old_dirs.append(old_dir)
+        for old_dir in old_dirs:
+            self.my_dirs.remove(old_dir)
         
-    def scan_file(self, path):
+    def scan_file(self, path, name):
         self.remove_file(path)
-        self.insert_file(path)
+        self.insert_file(path, name)
 
     __metadatafile = property(lambda self: os.path.join(self.path, METADATA_FILENAME))
 
@@ -333,19 +396,18 @@ class Collection(object):
                     newfiles.append(file)
                     if not file.is_up_to_date():
                         self.log.debug("Changed %s", filepath)
-                        self.scan_file(filepath)
+                        self.scan_file(filepath, filename)
                     break
             else:
                 self.log.debug("New %s", filepath)
                 newfiles.append(Pathtime(filepath))
-                if not os.path.isdir(filepath):
-                    self.insert_file(filepath)
-                else:
-                    self.insert_directory("/".join([self.urlpath, filename]))
+                self.insert_file(filepath, filename)
+
         for file in self.files:
             if os.path.basename(file.path) not in filenames:
                 self.log.debug("Removed %s", file.path)
                 self.remove_file(file.path)
+
         h = hashlib.sha1()
         for item in self.my_items:
             if getattr(item, 'etag', None):
@@ -365,6 +427,7 @@ class Collection(object):
         self.path = paths.url_to_file(path)
         self.files = []
         self.my_items = []
+        self.my_dirs = []
         self.mtime = 0
         self._ctag = ''
         self.etag = hashlib.sha1(self.path.encode('utf-8')).hexdigest()
@@ -604,6 +667,10 @@ class Collection(object):
         return True
 
     @property
+    def is_collection(self):
+        return True
+
+    @property
     def ctag(self):
         self.scan_dir(False)
         """Ctag from collection."""
@@ -641,6 +708,12 @@ class Collection(object):
         """Get list of all items in collection."""
         self.scan_dir(False)
         return self.my_items
+
+    @property
+    def dirs(self):
+        """Get list of all dirs in collection."""
+        self.scan_dir(False)
+        return self.my_dirs
 
     @property
     def last_modified(self):

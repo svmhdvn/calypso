@@ -135,12 +135,12 @@ def propfind(path, xml_request, collection, depth, context):
                 items = [collection]
             else:
                 # We limit ourselves to depth == 1
-                items = [collection] + collection.items
+                items = [collection] + collection.items + collection.dirs
     else:
         items = []
 
     for item in items:
-        is_collection = isinstance(item, webdav.Collection)
+        is_collection = item.is_collection
 
         response = ET.Element(_tag("D", "response"))
         multistatus.append(response)
