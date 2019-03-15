@@ -329,18 +329,19 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
         if len(self._answer):
             self.wfile.write(self._answer)
 
-    def if_match(self, item):
-        header = self.headers.get("If-Match", item.etag)
-        header = email.utils.unquote(header)
-        log.debug("header '%s' etag '%s'" % (header, item.etag))
-        if header == item.etag:
-            return True
-        quoted = '"' + item.etag + '"'
-        if header == quoted:
-            return True
-        extraquoted = email.utils.quote(quoted)
-        if header == extraquoted:
-            return True
+    def if_match(self, items):
+        for item in items:
+            header = self.headers.get("If-Match", item.etag)
+            header = email.utils.unquote(header)
+            log.debug("header '%s' etag '%s'" % (header, item.etag))
+            if header == item.etag:
+                return True
+            quoted = '"' + item.etag + '"'
+            if header == quoted:
+                return True
+            extraquoted = email.utils.quote(quoted)
+            if header == extraquoted:
+                return True
         return False
 
     @check_rights
@@ -351,13 +352,13 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
         try:
             item_name = paths.resource_from_path(self.path)
             with self._collection:
-                item = self._collection.get_item(item_name)
+                items = self._collection.get_items(item_name)
 
-                if item and self.if_match(item):
+                if len(items) and self.if_match(items):
                     # No ETag precondition or precondition verified, delete item
                     self._answer = xmlutils.delete(self.path, self._collection, context=context)
                 
-                elif not item:
+                elif not len(items):
                     # Item does not exist
                     code = client.NOT_FOUND
                 else:
@@ -439,8 +440,8 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
         try:
             item_name = paths.resource_from_path(self.path)
             with self._collection:
-                item = self._collection.get_item(item_name)
-                if not item or self.if_match(item):
+                items = self._collection.get_items(item_name)
+                if not len(items) or self.if_match(items):
 
                     # PUT allowed in 3 cases
                     # Case 1: No item and no ETag precondition: Add new item
