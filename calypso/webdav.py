@@ -38,6 +38,7 @@ import subprocess
 import vobject.base
 import iniparse
 import configparser
+import threading
 from configparser import RawConfigParser as ConfigParser
 from . import config, paths
 
@@ -371,6 +372,7 @@ class Collection(object):
         self.metadata_mtime = None
         self.scan_dir(False)
         self.tag = "Collection"
+        self.lock = threading.Lock()
 
     def __str__(self):
         return "Calendar-%s (at %s)" % (self.name, self.path)
@@ -378,6 +380,18 @@ class Collection(object):
     def __repr__(self):
         return "<Calendar %s>" % (self.name)
         
+    def acquire(self):
+        self.lock.acquire()
+
+    def release(self):
+        self.lock.release()
+
+    def __enter__(self):
+        self.lock.__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.lock.__exit__(exc_type, exc_val, exc_tb)
+
     def has_git(self):
         return True
 

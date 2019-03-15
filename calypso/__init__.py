@@ -43,6 +43,7 @@ import email.utils
 import logging
 import email
 import ssl
+import threading
 from http import client, server
 
 
@@ -99,7 +100,7 @@ class HTTPServer(server.HTTPServer):
     # pylint: disable=W0231
     def __init__(self, address, handler):
         """Create server."""
-        server.HTTPServer.__init__(self, address, handler)
+        server.ThreadingHTTPServer.__init__(self, address, handler)
         self.acl = acl.load()
     # pylint: enable=W0231
 
@@ -230,6 +231,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
 
 
     collections = {}
+    collections_lock = threading.Lock()
 
     @property
     def _collection(self):
@@ -237,9 +239,10 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
         path = paths.collection_from_path(self.path)
         if not path:
             return None
-        if not path in CollectionHTTPHandler.collections:
-            CollectionHTTPHandler.collections[path] = webdav.Collection(path)
-        return CollectionHTTPHandler.collections[path]
+        with CollectionHTTPHandler.collections_lock:
+            if not path in CollectionHTTPHandler.collections:
+                CollectionHTTPHandler.collections[path] = webdav.Collection(path)
+            return CollectionHTTPHandler.collections[path]
 
     def _decode(self, text):
         """Try to decode text according to various parameters."""
@@ -282,52 +285,54 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
 
         self._answer = ''
         answer_text = ''
+        code = client.OK
+        last_modified = ''
         try:
             item_name = paths.resource_from_path(self.path)
-            if item_name and self._collection:
-                # Get collection item
-                item = self._collection.get_item(item_name)
-                if item:
-                    if is_get:
-                        answer_text = item.text
-                    etag = item.etag
-                else:
-                    self.send_response(client.GONE)
-                    self.send_header("Content-Length", 0)
-                    self.end_headers()
-                    return
-            elif self._collection:
-                # Get whole collection
-                if is_get:
-                    answer_text = self._collection.text
-                etag = self._collection.etag
-            else:
-                self.send_calypso_response(client.NOT_FOUND, 0)
-                self.end_headers()
-                return
-                
-            if is_get:
-                try:
-                    self._answer = answer_text.encode(self._encoding,"xmlcharrefreplace")
-                except UnicodeDecodeError:
-                    answer_text = answer_text.decode(errors="ignore")
-                    self._answer = answer_text.encode(self._encoding,"ignore")
+            if self._collection:
+                with self._collection:
+                    if item_name:
+                        # Get collection item
+                        item = self._collection.get_item(item_name)
+                        if item:
+                            if is_get:
+                                answer_text = item.text
+                            etag = item.etag
+                        else:
+                            code = client.GONE
+                    else:
+                        # Get whole collection
+                        if is_get:
+                            answer_text = self._collection.text
+                        etag = self._collection.etag
+                    last_modified = self._collection.last_modified
 
-            self.send_calypso_response(client.OK, len(self._answer))
-            self.send_header("Content-Type", "text/calendar")
-            self.send_header("Last-Modified", email.utils.formatdate(time.mktime(self._collection.last_modified)))
-            self.send_header("ETag", etag)
-            self.end_headers()
-            if is_get:
-                self.wfile.write(self._answer)
+                if len(answer_text):
+                    try:
+                        self._answer = answer_text.encode(self._encoding,"xmlcharrefreplace")
+                    except UnicodeDecodeError:
+                        answer_text = answer_text.decode(errors="ignore")
+                        self._answer = answer_text.encode(self._encoding,"ignore")
+            else:
+                code = client.NOT_FOUND
+                
         except Exception:
             log.exception("Failed HEAD for %s", self.path)
-            self.send_calypso_response(client.BAD_REQUEST, 0)
-            self.end_headers()
+            code = client.BAD_REQUEST
+
+        self.send_calypso_response(code, len(self._answer))
+        if code == client.OK:
+            self.send_header("Content-Type", "text/calendar")
+            self.send_header("Last-Modified", email.utils.formatdate(time.mktime(last_modified)))
+            self.send_header("ETag", etag)
+        self.end_headers()
+        if len(self._answer):
+            self.wfile.write(self._answer)
 
     def if_match(self, item):
         header = self.headers.get("If-Match", item.etag)
         header = email.utils.unquote(header)
+        log.debug("header '%s' etag '%s'" % (header, item.etag))
         if header == item.etag:
             return True
         quoted = '"' + item.etag + '"'
@@ -341,30 +346,34 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
     @check_rights
     def do_DELETE(self, context):
         """Manage DELETE request."""
+        self._answer = ''
+        code = client.NO_CONTENT
         try:
             item_name = paths.resource_from_path(self.path)
-            item = self._collection.get_item(item_name)
+            with self._collection:
+                item = self._collection.get_item(item_name)
 
-            if item and self.if_match(item):
-                # No ETag precondition or precondition verified, delete item
-                self._answer = xmlutils.delete(self.path, self._collection, context=context)
+                if item and self.if_match(item):
+                    # No ETag precondition or precondition verified, delete item
+                    self._answer = xmlutils.delete(self.path, self._collection, context=context)
                 
-                self.send_calypso_response(client.NO_CONTENT, len(self._answer))
-                self.send_header("Content-Type", "text/xml")
-                self.end_headers()
-                self.wfile.write(self._answer)
-            elif not item:
-                # Item does not exist
-                self.send_calypso_response(client.NOT_FOUND, 0)
-                self.end_headers()
-            else:
-                # No item or ETag precondition not verified, do not delete item
-                self.send_calypso_response(client.PRECONDITION_FAILED, 0)
-                self.end_headers()
+                elif not item:
+                    # Item does not exist
+                    code = client.NOT_FOUND
+                else:
+                    # No item or ETag precondition not verified, do not delete item
+                    code = client.PRECONDITION_FAILED
+
         except Exception:
             log.exception("Failed DELETE for %s", self.path)
-            self.send_calypso_response(client.BAD_REQUEST, 0)
-            self.end_headers()
+            code = client.BAD_REQUEST
+
+        self.send_calypso_response(code, len(self._answer))
+        if len(self._answer):
+            self.send_header("Content-Type", "text/xml")
+        self.end_headers()
+        if len(self._answer):
+            self.wfile.write(self._answer)
 
     @check_rights
     def do_MKCALENDAR(self, context):
@@ -389,9 +398,10 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
             log.debug("PROPFIND %s", xml_request)
             depth = self.headers.get("depth", "infinity")
             if depth != "infinity":
-                self._answer = xmlutils.propfind(
-                    self.path, xml_request, self._collection,
-                    depth, context)
+                with self._collection:
+                    self._answer = xmlutils.propfind(
+                        self.path, xml_request, self._collection,
+                        depth, context)
                 status = client.MULTI_STATUS
             else:
                 self._answer = xmlutils.propfind_deny()
@@ -423,35 +433,41 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
     @check_rights
     def do_PUT(self, context):
         """Manage PUT request."""
+
+        code = client.CREATED
+        etag = None
         try:
             item_name = paths.resource_from_path(self.path)
-            item = self._collection.get_item(item_name)
-            if not item or self.if_match(item):
+            with self._collection:
+                item = self._collection.get_item(item_name)
+                if not item or self.if_match(item):
 
-                # PUT allowed in 3 cases
-                # Case 1: No item and no ETag precondition: Add new item
-                # Case 2: Item and ETag precondition verified: Modify item
-                # Case 3: Item and no Etag precondition: Force modifying item
-                webdav_request = self._decode(self.xml_request)
-                new_item = xmlutils.put(self.path, webdav_request, self._collection, context=context)
+                    # PUT allowed in 3 cases
+                    # Case 1: No item and no ETag precondition: Add new item
+                    # Case 2: Item and ETag precondition verified: Modify item
+                    # Case 3: Item and no Etag precondition: Force modifying item
+                    webdav_request = self._decode(self.xml_request)
+                    new_item = xmlutils.put(self.path, webdav_request, self._collection, context=context)
                 
-                log.debug("item_name %s new_name %s", item_name, new_item.name)
-                etag = new_item.etag
-                #log.debug("replacement etag %s", etag)
+                    log.debug("item_name %s new_name %s", item_name, new_item.name)
+                    etag = new_item.etag
+                    #log.debug("replacement etag %s", etag)
 
-                self.send_calypso_response(client.CREATED, 0)
-                self.send_header("ETag", etag)
-                self.end_headers()
-            else:
-                #log.debug("Precondition failed")
-                # PUT rejected in all other cases
-                self.send_calypso_response(client.PRECONDITION_FAILED, 0)
-                self.end_headers()
+                    code = client.CREATED
+                    etag = new_item.etag
+                else:
+                    #log.debug("Precondition failed")
+                    # PUT rejected in all other cases
+                    code = client.PRECONDITION_FAILED
+
         except Exception:
             log.exception('Failed PUT for %s', self.path)
-            self.send_calypso_response(client.BAD_REQUEST, 0)
-            self.end_headers()
+            code = client.BAD_REQUEST
 
+        self.send_calypso_response(code, 0)
+        if etag:
+            self.send_header('ETag', etag)
+        self.end_headers()
 
     @check_rights
     def do_REPORT(self, context):
@@ -459,7 +475,9 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
         try:
             xml_request = self.xml_request
             log.debug("REPORT %s %s", self.path, xml_request)
-            self._answer = xmlutils.report(self.path, xml_request, self._collection)
+            with self._collection:
+                self._answer = xmlutils.report(self.path, xml_request, self._collection)
+
             log.debug("REPORT ANSWER %s", self._answer)
             self.send_calypso_response(client.MULTI_STATUS, len(self._answer))
             self.send_header("Content-Type", "text/xml")
