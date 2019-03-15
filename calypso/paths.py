@@ -20,6 +20,7 @@
 # along with Calypso.  If not, see <http://www.gnu.org/licenses/>.
 
 import urllib
+import urllib.request
 import os.path
 import posixpath # the semantics of urls follow posix rules, not platform dependent rules
 import logging
@@ -62,7 +63,7 @@ def base_prefix():
 def url_to_file(url):
     if url.startswith(base_prefix()):
         url = "/" + url[len(base_prefix()):].lstrip("/")
-    tail = urllib.url2pathname(url.strip("/"))
+    tail = urllib.request.url2pathname(url.strip("/"))
     # eliminate .. components, and potential double leading slashes
     tail = posixpath.normpath('/' + tail).lstrip('/')
     file = os.path.join(data_root(), tail)
@@ -128,7 +129,7 @@ def resource_from_path(path):
         collection = parent_url(collection)
 
     if child_path:
-        name = urllib.unquote(child_path)
+        name = urllib.parse.unquote(child_path)
     else:
         name = None
 
@@ -153,7 +154,7 @@ def collection_from_path(path):
         return None
 
     # unquote, strip off any trailing slash, then clean up /../ and // entries
-    collection = "/" + urllib.unquote(collection).strip("/")
+    collection = "/" + urllib.parse.unquote(collection).strip("/")
 
     log.debug('Path %s results in collection: %s', path, collection)
     return collection

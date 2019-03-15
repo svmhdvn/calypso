@@ -41,17 +41,10 @@ import socket
 import time
 import email.utils
 import logging
-import rfc822
+import email
 import ssl
+from http import client, server
 
-# Manage Python2/3 different modules
-# pylint: disable=F0401
-try:
-    from http import client, server
-except ImportError:
-    import httplib as client
-    import BaseHTTPServer as server
-# pylint: enable=F0401
 
 from . import acl, config, webdav, xmlutils, paths, gssapi
 
@@ -115,18 +108,14 @@ class HTTPSServer(HTTPServer):
     """HTTPS server."""
     PROTOCOL = "https"
 
-    def __init__(self, address, handler):
-        """Create server by wrapping HTTP socket in an SSL socket."""
-        HTTPServer.__init__(self, address, handler)
-        self.socket = ssl.wrap_socket(
-            socket.socket(self.address_family, self.socket_type),
-            server_side=True,
-            certfile=os.path.expanduser(config.get("server", "certificate")),
-            keyfile=os.path.expanduser(config.get("server", "key")),
-            ssl_version=ssl.PROTOCOL_SSLv23)
-        self.server_bind()
-        self.server_activate()
+    def server_bind(self):
+        HTTPServer.server_bind(self)
 
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(os.path.expanduser(config.get("server", "certificate")),
+                                keyfile=os.path.expanduser(config.get("server", "key")))
+                                
+        self.socket = context.wrap_socket(self.socket,server_side=True)
 
 class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
     """HTTP requests handler for WebDAV collections."""
@@ -233,7 +222,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
             log.error("Request timed out: %r", e)
             self.close_connection = 1
             return
-        except ssl.SSLError, x:
+        except ssl.SSLError as x:
             #an io error. Discard this connection
             log.error("SSL request error: %r", x.args[0])
             self.close_connection = 1
@@ -338,13 +327,13 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
 
     def if_match(self, item):
         header = self.headers.get("If-Match", item.etag)
-        header = rfc822.unquote(header)
+        header = email.utils.unquote(header)
         if header == item.etag:
             return True
         quoted = '"' + item.etag + '"'
         if header == quoted:
             return True
-        extraquoted = rfc822.quote(quoted)
+        extraquoted = email.utils.quote(quoted)
         if header == extraquoted:
             return True
         return False

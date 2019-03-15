@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
 # This file is part of Calypso Server - Calendar Server
@@ -42,11 +42,11 @@ from setuptools import setup
 
 try:
     from calypso import VERSION
-except ImportError, e:
-    print 'Error importing Calypso, probably dependencies are not installed'
-    print e
+except ImportError as e:
+    print('Error importing Calypso, probably dependencies are not installed')
+    print(e)
     VERSION = '0.0.1'
-    print 'Assuming version %s' % VERSION
+    print('Assuming version %s' % VERSION)
 
 # build_scripts is known to have a lot of public methods
 # pylint: disable=R0904

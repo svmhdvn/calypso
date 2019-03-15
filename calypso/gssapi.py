@@ -23,9 +23,9 @@ This module handles kerberos authenticatien via gssapi
 """
 
 import os
-
-from . import config
-from acl import nopwd
+import calypso.acl
+import calypso.config
+import calypso.acl.nopwd
 
 # pylint: disable=F0401
 try:

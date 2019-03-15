@@ -36,12 +36,14 @@ import vobject
 import re
 import subprocess
 import vobject.base
-
-import ConfigParser
-
+import iniparse
+import configparser
+from configparser import RawConfigParser as ConfigParser
 from . import config, paths
 
 METADATA_FILENAME = ".calypso-collection"
+
+# pylint: enable=F0401
 
 #
 # Recursive search for 'name' within 'vobject'
@@ -67,10 +69,6 @@ class Item(object):
         """Initialize object from ``text`` and different ``kwargs``."""
 
         self.log = logging.getLogger(__name__)
-        try:
-            text = text.encode('utf8')
-        except UnicodeDecodeError:
-            text = text.decode('latin1').encode('utf-8')
 
         # Strip out control characters
 
@@ -83,21 +81,21 @@ class Item(object):
             raise
 
 
-        if not self.object.contents.has_key('x-calypso-name'):
+        if 'x-calpyso-name' not in self.object.contents:
             if not name:
                 if self.object.name == 'VCARD' or self.object.name == 'VEVENT':
-                    if not self.object.contents.has_key('uid'):
-                        self.object.add('UID').value = hashlib.sha1(text).hexdigest()
+                    if 'uid' not in self.object.contents:
+                        self.object.add('UID').value = hashlib.sha1(text.encode('utf-8')).hexdigest()
                     name = self.object.uid.value
                 else:
                     for child in self.object.getChildren():
                         if child.name == 'VEVENT' or child.name == 'VCARD':
-                            if not child.contents.has_key('uid'):
-                                child.add('UID').value = hashlib.sha1(text).hexdigest()
+                            if 'uid' not in child.contents:
+                                child.add('UID').value = hashlib.sha1(text.encode('utf-8')).hexdigest()
                             name = child.uid.value
                             break
                     if not name:
-                        name = hashlib.sha1(text).hexdigest()
+                        name = hashlib.sha1(text.encode('utf-8')).hexdigest()
                 
             self.object.add("X-CALYPSO-NAME").value = name
         else:
@@ -109,7 +107,7 @@ class Item(object):
         self.name = self.object.x_calypso_name.value
         self.urlpath = "/".join([parent_urlpath, self.name])
         self.tag = self.object.name
-        self.etag = hashlib.sha1(text).hexdigest()
+        self.etag = hashlib.sha1(text.encode('utf-8')).hexdigest()
 
     @property
     def is_vcard(self):
@@ -175,10 +173,10 @@ class Item(object):
 
         """
         try:
-            return self.object.serialize().decode('utf-8')
-        except vobject.base.ValidateError, e:
+            return self.object.serialize()
+        except vobject.base.ValidateError as e:
             self.log.warn('Validation error %s in %s', e, self.urlpath)
-            return self.object.serialize(validate=False).decode('utf-8')
+            return self.object.serialize(validate=False)
 
     @property
     def length(self):
@@ -191,7 +189,7 @@ class Item(object):
             return value.utctimetuple()
         return time.gmtime()
 
-    def __unicode__(self):
+    def __str__(self):
         fn = self.object.getChildValue("fn")
         if fn:
             return fn
@@ -249,7 +247,7 @@ class Collection(object):
     def get_description(self):
         try:
             return str(self.metadata.get('collection', 'description'))
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError, ValueError):
+        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             pass
 
         try:
@@ -268,7 +266,7 @@ class Collection(object):
         try:
             item = self.read_file(path)
             self.my_items.append(item)
-        except Exception, ex:
+        except Exception as ex:
             self.log.exception("Insert %s failed", path)
             return
 
@@ -276,7 +274,7 @@ class Collection(object):
          try:
             item = Collection(path)
             self.my_items.append(item)
-         except Exception, ex:
+         except Exception as ex:
             self.log.exception("Insert %s failed", path)
             return
 
@@ -304,7 +302,7 @@ class Collection(object):
         if not force and mtime == self.mtime and self.metadata is not None:
             return
 
-        parser = ConfigParser.RawConfigParser()
+        parser = ConfigParser()
         parser.read(self.__metadatafile)
         self.metadata = parser
 
@@ -350,9 +348,9 @@ class Collection(object):
         h = hashlib.sha1()
         for item in self.my_items:
             if getattr(item, 'etag', None):
-                h.update(item.etag)
+                h.update(item.etag.encode('utf-8'))
             else:
-                h.update(item.ctag)
+                h.update(item.ctag.encode('utf-8'))
         self._ctag = '%d-' % self.mtime + h.hexdigest()
         self.files = newfiles
 
@@ -368,7 +366,7 @@ class Collection(object):
         self.my_items = []
         self.mtime = 0
         self._ctag = ''
-        self.etag = hashlib.sha1(self.path).hexdigest()
+        self.etag = hashlib.sha1(self.path.encode('utf-8')).hexdigest()
         self.metadata = None
         self.metadata_mtime = None
         self.scan_dir(False)
@@ -422,7 +420,7 @@ class Collection(object):
             # Touch directory so that another running instance will update
             try:
                 os.utime(self.path, None)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.exception("Failed to set directory mtime")
             
     def write_file(self, item):
@@ -440,7 +438,7 @@ class Collection(object):
         if not os.path.exists(os.path.dirname(self.path)):
             try:
                 os.makedirs(os.path.dirname(self.path))
-            except OSError, ose:
+            except OSError as ose:
                 self.log.exception("Failed to make collection directory %s: %s", self.path, ose)
                 raise
 
@@ -450,10 +448,10 @@ class Collection(object):
             path = self.write_file(item)
             self.git_add(path, context=context)
             self.scan_dir(True)
-        except OSError, ex:
+        except OSError as ex:
             self.log.exception("Error writing file")
             raise
-        except Exception, ex:
+        except Exception as ex:
             self.log.exception("Caught Exception")
             self.log.debug("Failed to create %s: %s", self.path,  ex)
             raise
@@ -467,7 +465,7 @@ class Collection(object):
             os.unlink(item.path)
             self.git_rm(item.path, context=context)
             self.scan_dir(True)
-        except Exception, ex:
+        except Exception as ex:
             self.log.exception("Failed to remove %s", item.path)
             raise
 
@@ -482,7 +480,7 @@ class Collection(object):
             self.scan_file(item.path)
             self.git_change(item.path, context=context)
             self.scan_dir(True)
-        except Exception, ex:
+        except Exception as ex:
             self.log.exception("Failed to rewrite %s", item.path)
             raise
         
@@ -511,7 +509,7 @@ class Collection(object):
         self.log.debug('append name %s', name)
         try:
             new_item = Item(text, name, None, self.urlpath)
-        except Exception, e:
+        except Exception as e:
             self.log.exception("Cannot create new item")
             raise
         if new_item.name in (item.name for item in self.my_items):
@@ -575,7 +573,7 @@ class Collection(object):
                     for ve in events:
                         # Check for events with both dtstart and duration entries and
                         # delete the duration one
-                        if ve.contents.has_key('dtstart') and ve.contents.has_key('duration'):
+                        if 'dtstart' in ve.contents and 'duration' in ve.contents:
                             del ve.contents['duration']
                         new_ics.vevent_list = [ve]
                         new_item = Item(new_ics.serialize().decode('utf-8'), None, path, self.urlpath)
@@ -584,7 +582,7 @@ class Collection(object):
                     new_item = Item(new_ics.serialize().decode('utf-8'), None, path, self.urlpath)
                     self.import_item(new_item, path)
             return True
-        except Exception, ex:
+        except Exception as ex:
             self.log.exception("Failed to import: %s", path)
             return False
 
@@ -616,7 +614,7 @@ class Collection(object):
         """Color."""
         try:
             return "#%s" % self.metadata.get('collection', 'color')
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError, ValueError):
+        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             return None
 
     @property
@@ -648,12 +646,12 @@ class Collection(object):
     def is_addressbook(self):
         try:
             return self.metadata.getboolean('collection', 'is-addressbook')
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError, ValueError):
+        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             return True
 
     @property
     def is_calendar(self):
         try:
             return self.metadata.getboolean('collection', 'is-calendar')
-        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError, ValueError):
+        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             return True
