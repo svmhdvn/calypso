@@ -81,6 +81,13 @@ class Item(object):
             self.log.exception("Parse error in %s %s", name, path)
             raise
 
+        # Text is the serialized form of the item.
+
+        try:
+            self._text = self.object.serialize()
+        except vobject.base.ValidateError as e:
+            self.log.warn('Validation error %s in %s', e, self.urlpath)
+            self._text = self.object.serialize(validate=False)
 
         if 'x-calpyso-name' not in self.object.contents:
             if not name:
@@ -175,16 +182,7 @@ class Item(object):
 
     @property
     def text(self):
-        """Item text.
-
-        Text is the serialized form of the item.
-
-        """
-        try:
-            return self.object.serialize()
-        except vobject.base.ValidateError as e:
-            self.log.warn('Validation error %s in %s', e, self.urlpath)
-            return self.object.serialize(validate=False)
+        return self._text
 
     @property
     def length(self):
@@ -409,11 +407,13 @@ class Collection(object):
                 self.remove_file(file.path)
 
         h = hashlib.sha1()
+        self._text = ''
         for item in self.my_items:
             if getattr(item, 'etag', None):
                 h.update(item.etag.encode('utf-8'))
             else:
                 h.update(item.ctag.encode('utf-8'))
+            self._text = self._text + item.text
         self._ctag = '%d-' % self.mtime + h.hexdigest()
         self.files = newfiles
 
@@ -429,6 +429,7 @@ class Collection(object):
         self.my_items = []
         self.my_dirs = []
         self.mtime = 0
+        self._text = ''
         self._ctag = ''
         self.etag = hashlib.sha1(self.path.encode('utf-8')).hexdigest()
         self.metadata = None
@@ -685,10 +686,7 @@ class Collection(object):
     def text(self):
         """Collection as plain text."""
         self.scan_dir(False)
-        _text = ""
-        for item in self.my_items:
-            _text = _text + item.text
-        return _text
+        return self._text
 
     @property
     def color(self):
