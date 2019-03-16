@@ -247,7 +247,8 @@ def put(path, webdav_request, collection, context):
     """Read PUT requests."""
     name = paths.resource_from_path(path)
     log.debug('xmlutils put path %s name %s', path, name)
-    if name in (item.name for item in collection.items):
+    old_item = collection.get_item(name)
+    if old_item:
         # PUT is modifying an existing item
         log.debug('Replacing item named %s', name)
         return collection.replace(name, webdav_request, context=context)
@@ -372,7 +373,7 @@ def report(path, xml_request, collection):
         if name:
             # Reference is an item
             path = paths.collection_from_path(hreference) + "/"
-            items = (item for item in collection.items if item.name == name)
+            items = collection.get_items(name)
         else:
             # Reference is a collection
             path = hreference
@@ -382,6 +383,8 @@ def report(path, xml_request, collection):
         for item in items:
             if not match_filter(item, filter_element):
                 continue
+
+            log.debug("match %s" % item)
 
             response = ET.Element(_tag("D", "response"))
             multistatus.append(response)

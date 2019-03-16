@@ -183,6 +183,15 @@ class Item(object):
             return value.utctimetuple()
         return time.gmtime()
 
+    def match_name(self, name):
+        if self.name == name:
+            return True
+        if self.name + self.file_extension == name:
+            return True
+        if self.name == name + self.file_extension:
+            return True
+        return False
+
     def __str__(self):
         fn = self.object.getChildValue("fn")
         if fn:
@@ -543,7 +552,7 @@ class Collection(object):
         try:
             new_path = self.write_file(item)
             os.rename(new_path, item.path)
-            self.scan_file(item.path)
+            self.scan_file(item.path, item.name)
             self.git_change(item.path, context=context)
             self.scan_dir(True)
         except Exception as ex:
@@ -553,7 +562,7 @@ class Collection(object):
     def get_item(self, name):
         """Get collection item called ``name``."""
         for item in self.my_items:
-            if item.name == name:
+            if item.match_name(name):
                 return item
         return None
 
@@ -561,7 +570,7 @@ class Collection(object):
         """Get collection items called ``name``."""
         items=[]
         for item in self.my_items:
-            if item.name == name:
+            if item.match_name(name):
                 items.append(item)
         return items
 
@@ -578,8 +587,9 @@ class Collection(object):
         except Exception as e:
             self.log.exception("Cannot create new item")
             raise
-        if new_item.name in (item.name for item in self.my_items):
-            self.log.debug("Item %s already present %s" , new_item.name, self.get_item(new_item.name).path)
+        old_item = self.get_item(new_item.name)
+        if old_item:
+            self.log.debug("Item %s already present %s" , new_item.name, old_item.path)
             raise CalypsoError(new_item.name, "Item already present")
         self.log.debug("New item %s", new_item.name)
         self.create_file(new_item, context=context)
@@ -589,7 +599,7 @@ class Collection(object):
         """Remove object named ``name`` from collection."""
         self.log.debug("Remove object %s", name)
         for old_item in self.my_items:
-            if old_item.name == name:
+            if old_item.match_name(name):
                 self.destroy_file(old_item, context=context)
                 
     def replace(self, name, text, context):
