@@ -71,23 +71,15 @@ class Item(object):
 
         self.log = logging.getLogger(__name__)
 
+        # Preserve the original text as the contents of the object
+
+        self.text = text
+
         # Strip out control characters
 
-        text = re.sub(r"[\x01-\x09\x0b-\x1F\x7F]","",text)
+        text = re.sub(r"[\x01-\x09\x0b-\x1F\x7F]","", text)
 
-        try:
-            self.object = vobject.readOne(text)
-        except Exception:
-            self.log.exception("Parse error in %s %s", name, path)
-            raise
-
-        # Text is the serialized form of the item.
-
-        try:
-            self._text = self.object.serialize()
-        except vobject.base.ValidateError as e:
-            self.log.warn('Validation error %s in %s', e, self.urlpath)
-            self._text = self.object.serialize(validate=False)
+        self.object = vobject.readOne(text)
 
         if 'x-calpyso-name' not in self.object.contents:
             if not name:
@@ -118,7 +110,7 @@ class Item(object):
         else:
             self.urlpath = "/".join([parent_urlpath, self.name])
         self.tag = self.object.name
-        self.etag = hashlib.sha1(text.encode('utf-8')).hexdigest()
+        self.etag = hashlib.sha1(self.text.encode('utf-8')).hexdigest()
 
     @property
     def is_vcard(self):
@@ -179,10 +171,6 @@ class Item(object):
         if self.is_vcal:
             return '.ics'
         return '.dav'
-
-    @property
-    def text(self):
-        return self._text
 
     @property
     def length(self):
@@ -505,7 +493,7 @@ class Collection(object):
         fd, path = tempfile.mkstemp(item.file_extension, item.file_prefix, dir=self.path)
         self.log.debug('Trying to write to %s', path)
         file = os.fdopen(fd, 'w')
-        file.write(item.text.encode('utf-8'))
+        file.write(item.text)
         file.close()
         self.log.debug('Wrote %s to %s', file, path)
         return path
