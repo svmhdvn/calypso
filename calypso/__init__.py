@@ -408,7 +408,10 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
                 self._answer = xmlutils.propfind_deny()
                 status = client.FORBIDDEN
 
-            log.debug("PROPFIND ANSWER %s", self._answer)
+            if len(self._answer) < 100:
+                log.debug("PROPFIND ANSWER %s", self._answer)
+            else:
+                log.debug("PROPFIND ANSWER len %d", len(self._answer))
 
             self.send_calypso_response(status, len(self._answer))
             self.send_header("DAV", "1, calendar-access")
@@ -479,7 +482,10 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
             with self._collection:
                 self._answer = xmlutils.report(self.path, xml_request, self._collection)
 
-            log.debug("REPORT ANSWER %s", self._answer)
+            if len(self._answer) < 100:
+                log.debug("REPORT ANSWER %s" % self._answer)
+            else:
+                log.debug("REPORT ANSWER %d" % len(self._answer))
             self.send_calypso_response(client.MULTI_STATUS, len(self._answer))
             self.send_header("Content-Type", "text/xml")
             self.end_headers()

@@ -126,7 +126,6 @@ def resource_from_path(path):
     else:
         name = None
 
-    log.debug('Path %s results in name: %s', path, name)
     return name
 
 #
@@ -149,6 +148,5 @@ def collection_from_path(path):
     # unquote, strip off any trailing slash, then clean up /../ and // entries
     collection = "/" + urllib.parse.unquote(collection).strip("/")
 
-    # log.debug('Path %s results in collection: %s', path, collection)
     return collection
     
