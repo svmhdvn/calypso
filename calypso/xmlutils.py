@@ -265,7 +265,7 @@ def match_filter_element(vobject, fe):
             if comp == vobject.name:
                 hassub = False
                 submatch = False
-                for fc in fe.getchildren():
+                for fc in fe:
                     if match_filter_element(vobject, fc):
                         submatch = True
                         break
@@ -334,7 +334,7 @@ def match_filter(item, filter):
         return True
     if filter.tag != _tag("C", "filter"):
         return True
-    for fe in filter.getchildren():
+    for fe in filter:
         if match_filter_element(item.object, fe):
             return True
     return False
