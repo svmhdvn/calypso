@@ -304,16 +304,17 @@ class Collection(object):
             pass
 
         try:
-            f = codecs.open(os.path.join(self.path, ".git/description"), encoding='utf-8')
-            return f.read()
+            with codecs.open(os.path.join(self.path, ".git/description"), encoding='utf-8') as file:
+                return file.read()
         except:
             # .git/description is not present eg when the complete server is a single git repo
             return self.urlpath
 
     def read_file(self, path):
-        text = codecs.open(path,encoding='utf-8').read()
-        item = Item(text, None, path, self.urlpath)
-        return item
+        with codecs.open(path,encoding='utf-8') as file:
+            text = file.read()
+            item = Item(text, None, path, self.urlpath)
+            return item
 
     def insert_file(self, path, name):
         if os.path.isdir(path):
@@ -641,22 +642,23 @@ class Collection(object):
         """
 
         try:
-            new_object = vobject.readComponents(codecs.open(path,encoding='utf-8').read())
-            for new_ics in new_object:
-                if new_ics.name == 'VCALENDAR':
+            with codecs.open(path,encoding='utf-8') as file:
+                new_object = vobject.readComponents(file.read())
+                for new_ics in new_object:
+                    if new_ics.name == 'VCALENDAR':
 
-                    events = new_ics.vevent_list
-                    for ve in events:
-                        # Check for events with both dtstart and duration entries and
-                        # delete the duration one
-                        if 'dtstart' in ve.contents and 'duration' in ve.contents:
-                            del ve.contents['duration']
-                        new_ics.vevent_list = [ve]
-                        new_item = Item(new_ics.serialize().decode('utf-8'), None, path, self.urlpath)
+                        events = new_ics.vevent_list
+                        for ve in events:
+                            # Check for events with both dtstart and duration entries and
+                            # delete the duration one
+                            if 'dtstart' in ve.contents and 'duration' in ve.contents:
+                                del ve.contents['duration']
+                            new_ics.vevent_list = [ve]
+                            new_item = Item(new_ics.serialize(), None, path, self.urlpath)
+                            self.import_item(new_item, path)
+                    else:
+                        new_item = Item(new_ics.serialize(), None, path, self.urlpath)
                         self.import_item(new_item, path)
-                else:
-                    new_item = Item(new_ics.serialize().decode('utf-8'), None, path, self.urlpath)
-                    self.import_item(new_item, path)
             return True
         except Exception as ex:
             self.log.exception("Failed to import: %s", path)
