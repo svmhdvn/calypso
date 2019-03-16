@@ -115,7 +115,7 @@ class HTTPSServer(HTTPServer):
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(os.path.expanduser(config.get("server", "certificate")),
                                 keyfile=os.path.expanduser(config.get("server", "key")))
-                                
+
         self.socket = context.wrap_socket(self.socket,server_side=True)
 
 class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
@@ -124,7 +124,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
 
     # Decorator checking rights before performing request
     check_rights = lambda function: lambda request: _check(request, function)
-        
+
     # We do set Content-Length on all replies, so we can use HTTP/1.1
     # with multiple requests (as desired by the android CalDAV sync program
 
@@ -315,7 +315,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
                         self._answer = answer_text.encode(self._encoding,"ignore")
             else:
                 code = client.NOT_FOUND
-                
+
         except Exception:
             log.exception("Failed HEAD for %s", self.path)
             code = client.BAD_REQUEST
@@ -357,7 +357,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
                 if len(items) and self.if_match(items):
                     # No ETag precondition or precondition verified, delete item
                     self._answer = xmlutils.delete(self.path, self._collection, context=context)
-                
+
                 elif not len(items):
                     # Item does not exist
                     code = client.NOT_FOUND
@@ -433,7 +433,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
             log.exception("Failed SEARCH for %s", self.path)
             self.send_calypso_response(client.BAD_REQUEST, 0)
             self.end_headers()
-        
+
     @check_rights
     def do_PUT(self, context):
         """Manage PUT request."""
@@ -452,7 +452,7 @@ class CollectionHTTPHandler(server.BaseHTTPRequestHandler):
                     # Case 3: Item and no Etag precondition: Force modifying item
                     webdav_request = self._decode(self.xml_request)
                     new_item = xmlutils.put(self.path, webdav_request, self._collection, context=context)
-                
+
                     log.debug("item_name %s new_name %s", item_name, new_item.name)
                     etag = new_item.etag
                     #log.debug("replacement etag %s", etag)

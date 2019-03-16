@@ -149,4 +149,4 @@ def collection_from_path(path):
     collection = "/" + urllib.parse.unquote(collection).strip("/")
 
     return collection
-    
+

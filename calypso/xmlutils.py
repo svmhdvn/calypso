@@ -118,7 +118,7 @@ def propfind(path, xml_request, collection, depth, context):
                  _tag("D", "getcontentlength"),
                  _tag("D", "getlastmodified")]
 
-    
+
     # Writing answer
     multistatus = ET.Element(_tag("D", "multistatus"))
 
@@ -379,7 +379,7 @@ def report(path, xml_request, collection):
             path = hreference
             items = collection.items
 
-        
+
         for item in items:
             if not match_filter(item, filter_element):
                 continue
@@ -414,5 +414,5 @@ def report(path, xml_request, collection):
             propstat.append(status)
 
     reply = ET.tostring(multistatus, config.get("encoding", "request"))
-        
+
     return reply
