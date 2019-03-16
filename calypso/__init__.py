@@ -56,7 +56,7 @@ ch.setFormatter (formatter)
 log.addHandler(ch)
 negotiate = gssapi.Negotiate(log)
 
-VERSION = "1.5"
+VERSION = "2.0"
 
 def _check(request, function):
     """Check if user has sufficient rights for performing ``request``."""
