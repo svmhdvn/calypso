@@ -56,6 +56,13 @@ ch.setFormatter (formatter)
 log.addHandler(ch)
 negotiate = gssapi.Negotiate(log)
 
+http_server = server.HTTPServer
+try:
+    from http.server import ThreadingHTTPServer
+    http_server = server.ThreadingHTTPServer
+except ImportError:
+    pass
+
 VERSION = "2.0"
 
 def _check(request, function):
@@ -100,7 +107,7 @@ class HTTPServer(server.HTTPServer):
     # pylint: disable=W0231
     def __init__(self, address, handler):
         """Create server."""
-        server.ThreadingHTTPServer.__init__(self, address, handler)
+        http_server.__init__(self, address, handler)
         self.acl = acl.load()
     # pylint: enable=W0231
 
