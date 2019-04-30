@@ -225,6 +225,8 @@ def propfind(path, xml_request, collection, depth, context):
             elif tag in (_tag("A", "addressbook-description"),
                          _tag("C", "calendar-description")) and is_collection:
                 element.text = item.get_description()
+                if not element.text:
+                    element.text = "no description"
             prop.append(element)
 
         status = ET.Element(_tag("D", "status"))
