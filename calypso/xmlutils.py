@@ -181,6 +181,8 @@ def propfind(path, xml_request, collection, depth, context):
                 element.text = item.name
             elif tag == _tag("E", "calendar-color") and is_collection:
                 element.text = item.color
+                if not element.text:
+                    element.text = collection.color
             elif tag == _tag("D", "principal-URL"):
                 # TODO: use a real principal URL, read rfc3744-4.2 for info
                 tag = ET.Element(_tag("D", "href"))

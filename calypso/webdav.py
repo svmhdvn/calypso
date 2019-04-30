@@ -267,6 +267,17 @@ class Directory(Pathtime):
         return ''
 
     @property
+    def ctag(self):
+        return self.etag
+
+    @property
+    def color(self):
+        return None
+
+    def get_description(self):
+        return self.urlpath
+
+    @property
     def text(self):
         return self.path
 
