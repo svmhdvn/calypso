@@ -104,8 +104,7 @@ def propfind(path, xml_request, collection, depth, context):
         prop_element = None
 
     if prop_element is not None:
-        prop_list = prop_element.getchildren()
-        props = [prop.tag for prop in prop_list]
+        props = [prop.tag for prop in prop_element]
     else:
         props = [_tag("D", "resourcetype"),
                  _tag("D", "owner"),
@@ -353,8 +352,7 @@ def report(path, xml_request, collection):
     root = ET.fromstring(xml_request)
 
     prop_element = root.find(_tag("D", "prop"))
-    prop_list = prop_element.getchildren()
-    props = [prop.tag for prop in prop_list]
+    props = [prop.tag for prop in prop_element]
 
     filter_element = root.find(_tag("C", "filter"))
 
