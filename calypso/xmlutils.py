@@ -301,14 +301,14 @@ def match_filter_element(vobject, fe):
             start = "00010101T000000Z"  # start of year one
         # RFC 4791 state if end is missing, assume it is +infinity
         if end is None:
-            end = "99991231T235959Z"  # last date with four digit year
+            end = "21001231T235959Z"  # last date with four digit year
         if rruleset is None:
             rruleset = dateutil.rrule.rruleset()
             dtstart = vobject.dtstart.value
             try:
                 dtstart = datetime.datetime.combine(dtstart, datetime.time())
             except Exception:
-                0
+                pass
             if dtstart.tzinfo is None:
                 dtstart = dtstart.replace(tzinfo = dateutil.tz.tzlocal())
             rruleset.rdate(dtstart)
