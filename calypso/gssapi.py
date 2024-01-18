@@ -19,80 +19,79 @@
 """
 Gssapi module.
 
-This module handles kerberos authenticatien via gssapi
+This module handles kerberos authentication via gssapi
 """
 
+import base64
 import os
 import calypso.acl
 import calypso.config
-import calypso.acl.nopwd
+import calypso.acl.nopwd as nopwd
 
 # pylint: disable=F0401
 try:
-    import kerberos as krb
+    import gssapi
 except ImportError:
-    krb = None
+    gssapi = None
 # pylint: disable=F0401
 
-
 class Negotiate(object):
-    _gssapi = False
-
     def __init__(self, log):
         self.log = log
-        try:
-            self.servicename = os.path.expanduser(config.get("server",
-                                                             "servicename"))
-        except:
-            self.servicename = None
-
-        if self.servicename and krb:
-            self._gssapi = True
+        self.servicename = calypso.config.get("server", "servicename", fallback=None)
 
     def enabled(self):
-        return self._gssapi
+        """Check if GSSAPI negotiation is supported"""
+        return gssapi and self.servicename
 
     def try_aaa(self, authorization, request, owner):
         """Perform authentication and authorization"""
         user, success = self.step(authorization, request)
         if success:
             return user, nopwd.has_right(owner, user, None)
-        return user, False
+        return None, False
 
     def step(self, authorization, request):
         """
         Try to authenticate the client and if succesful authenticate
         ourself to the client.
         """
-        user = None
-
         if not self.enabled():
-            return (None, False)
+            return None, False
+
+        neg, challenge = authorization.split()
+        if neg.lower().strip() != 'negotiate':
+            return None, False
+
+        self.log.debug("Negotiate header found, trying Kerberos")
 
         try:
-            (neg, challenge) = authorization.split()
-            if neg.lower().strip() != 'negotiate':
-                return (None, False)
+            gssapi_name = gssapi.Name(self.servicename).canonicalize(gssapi.MechType.kerberos)
+        except Exception as err:
+            self.log.error("Invalid GSSAPI servicename='%s', please check the [server] section in the config file! GSSAPI error: %s", self.servicename, err)
+            return None, False
 
-            self.log.debug("Negotiate header found, trying Kerberos")
-            result, context = krb.authGSSServerInit(self.servicename)
-            result = krb.authGSSServerStep(context, challenge)
+        try:
+            gssapi_creds = gssapi.Credentials(usage='accept', name=gssapi_name)
+        except Exception as err:
+            self.log.error("Failed to obtain kerberos credentials from the system keytab! GSSAPI error: %s", err)
+            return None, False
 
-            if result == -1:
-                return (None, False)
+        try:
+            gssapi_ctx = gssapi.SecurityContext(creds=gssapi_creds, usage='accept')
+        except Exception as err:
+            self.log.error("Failed to create a GSSAPI security context for the given kerberos credentials! GSSAPI error: %s", err)
+            return None, False
 
-            response = krb.authGSSServerResponse(context)
-            # Client authenticated successfully, so authenticate to the client:
-            request.queue_header("www-authenticate",
-                                 "negotiate " + response)
-            user = krb.authGSSServerUserName(context)
+        try:
+            gssapi_token = gssapi_ctx.step(base64.b64decode(challenge.strip()))
+        except Exception as err:
+            self.log.error("Failed to perform GSSAPI negotation! GSSAPI error: %s", err)
+            return None, False
 
-            self.log.debug("Negotiate: found user %s" % user)
-            result = krb.authGSSServerClean(context)
-            if result != 1:
-                self.log.error("Failed to cleanup gss context")
-            return (user, True)
-        except krb.GSSError as err:
-            self.log.error("gssapi error: %s", err)
+        # Client authenticated successfully, so authenticate to the client:
+        request.queue_header("WWW-Authenticate", f"Negotiate {base64.b64encode(gssapi_token)}")
+        user = str(gssapi_ctx.initiator_name)
 
-        return None, False
+        self.log.debug("GSSAPI negotiation success: found user %s", user)
+        return user, True

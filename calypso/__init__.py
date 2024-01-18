@@ -92,9 +92,10 @@ def _check(request, function):
         request.send_calypso_response(client.UNAUTHORIZED, 0)
         if negotiate.enabled():
             request.send_header("WWW-Authenticate", "Negotiate")
-        request.send_header(
-            "WWW-Authenticate",
-            'Basic realm="Calypso CalDAV/CardDAV server - password required"')
+        else:
+            request.send_header(
+                "WWW-Authenticate",
+                'Basic realm="Calypso CalDAV/CardDAV server - password required"')
         request.end_headers()
     # pylint: enable=W0212
 

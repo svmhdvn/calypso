@@ -27,14 +27,7 @@ Give a configparser-like interface to read and write configuration.
 
 import os
 import sys
-# Manage Python2/3 different modules
-# pylint: disable=F0401
-try:
-    from configparser import RawConfigParser as ConfigParser
-except ImportError:
-    from ConfigParser import RawConfigParser as ConfigParser
-# pylint: enable=F0401
-
+import configparser
 
 # Default configuration
 INITIAL_CONFIG = {
@@ -46,7 +39,7 @@ INITIAL_CONFIG = {
         "certificate": "/etc/apache2/ssl/server.crt",
         "key": "/etc/apache2/ssl/server.key",
         "pidfile": "/var/run/calypso.pid",
-        "user_principal": "/%(user)s",
+#        "user_principal": "/%(user)s",
         "base_prefix": "/",
     },
     "encoding": {
@@ -67,7 +60,7 @@ INITIAL_CONFIG = {
 }
 
 # Create a ConfigParser and configure it
-_CONFIG_PARSER = ConfigParser()
+_CONFIG_PARSER = configparser.ConfigParser()
 
 for section, values in INITIAL_CONFIG.items():
     _CONFIG_PARSER.add_section(section)
@@ -75,7 +68,13 @@ for section, values in INITIAL_CONFIG.items():
         _CONFIG_PARSER.set(section, key, value)
 
 _CONFIG_PARSER.read("/etc/calypso/config")
-_CONFIG_PARSER.read(os.path.expanduser("~/.config/calypso/config"))
+
+xdg_cfg = os.getenv("XDG_CONFIG_HOME")
+if xdg_cfg:
+    _CONFIG_PARSER.read(os.path.join(xdg_cfg, "calypso/config"))
+else:
+    _CONFIG_PARSER.read(os.path.expanduser("~/.config/calypso/config"))
+
 cfg = os.getenv("CALYPSO_CONFIG")
 if cfg:
     _CONFIG_PARSER.read(cfg)

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/home/siva/src/playground/calypso-test/venv/bin/python
 # -*- coding: utf-8 -*-
 #
 # This file is part of Calypso - CalDAV/CardDAV/WebDAV Server
@@ -42,6 +42,7 @@ import logging
 import optparse
 import os
 import sys
+import pprint
 
 import calypso
 import calypso.webdav as webdav
@@ -96,7 +97,7 @@ for option in parser.option_list:
     key = option.dest
     if key:
         value = getattr(options, key)
-        calypso.config.set("server", key, value)
+        calypso.config.set("server", key, str(value))
 
 log = logging.getLogger()
 ch = logging.StreamHandler()
