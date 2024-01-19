@@ -21,7 +21,7 @@
 """
 Calypso configuration module.
 
-Give a configparser-like interface to read and write configuration.
+Give a configparser interface to read and write configuration.
 
 """
 
